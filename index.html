@@ -1,0 +1,313 @@
+
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MAWAR Digital Photobooth</title>
+<style>
+*{box-sizing:border-box}
+body{
+ margin:0;
+ font-family:Arial,sans-serif;
+ background:radial-gradient(ellipse at top,#783bc1,#240b48 75%);
+ color:white;
+ min-height:100vh;
+ text-align:center;
+}
+main{max-width:580px;margin:auto;padding:22px}
+.logo{width:76px;height:auto}
+.brand{font-size:17px;letter-spacing:3px;font-weight:bold}
+h1{color:#ffdc80;font-size:32px;margin:15px 0 5px}
+h2{font-size:20px;margin:5px}
+p{line-height:1.5}
+.stage{
+ position:relative;
+ width:100%;
+ margin:20px auto;
+ border:3px solid #eac568;
+ border-radius:18px;
+ overflow:hidden;
+ background:#180d2a;
+}
+canvas{width:100%;display:block}
+video{display:none}
+#count{
+ position:absolute;inset:0;
+ display:grid;place-items:center;
+ font-size:100px;font-weight:bold;
+ color:#ffe6a0;
+ text-shadow:0 3px 12px #000;
+ pointer-events:none;
+}
+.controls{
+ display:flex;flex-wrap:wrap;
+ justify-content:center;gap:10px;
+}
+button,select,.upload{
+ padding:13px 17px;
+ border-radius:12px;
+ border:1px solid #d8b65c;
+ font-size:15px;font-weight:bold;
+ cursor:pointer;
+ background:#ffffff15;color:white;
+}
+.gold{
+ background:linear-gradient(135deg,#fff0b0,#dca537);
+ color:#30104d;
+}
+select option{color:#24113d;background:white}
+button:disabled{opacity:.45;cursor:default}
+#status{font-size:13px;color:#e9d8ff}
+footer{font-size:12px;color:#d3b9ed;margin-top:25px}
+</style>
+</head>
+<body>
+<main>
+<img class="logo" src="logo.png" alt="Logo sekolah"
+ onerror="this.style.display='none'">
+<div class="brand">PPKI MAWAR</div>
+<div>SK BAYAN BARU</div>
+<h1>MAWAR PHOTOBOOTH</h1>
+<h2>LAST DAY OF SCHOOL 2026</h2>
+<p>Kenangan Terindah, Memori Selamanya</p>
+
+<div class="stage">
+<video id="video" autoplay playsinline muted></video>
+<canvas id="canvas" width="900" height="1200"></canvas>
+<div id="count"></div>
+</div>
+
+<div class="controls">
+<button id="start" class="gold">📷 Buka Kamera</button>
+<button id="flip">🔄 Tukar Kamera</button>
+<label class="upload">
+🖼️ Pilih Gambar
+<input id="upload" type="file" accept="image/*" hidden>
+</label>
+<select id="timer" aria-label="Countdown">
+<option value="3">3 Saat</option>
+<option value="5">5 Saat</option>
+<option value="10">10 Saat</option>
+</select>
+<button id="capture" class="gold" disabled>
+📸 Ambil Gambar
+</button>
+<button id="retake" disabled>↻ Ambil Semula</button>
+<button id="save" class="gold" disabled>
+⬇ Simpan Gambar
+</button>
+</div>
+
+<p id="status">Tekan Buka Kamera untuk bermula.</p>
+<footer>© 2026 PPKI MAWAR • SK BAYAN BARU</footer>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+const video = $('video');
+const canvas = $('canvas');
+const ctx = canvas.getContext('2d');
+const W = canvas.width, H = canvas.height;
+let stream = null;
+let facing = 'user';
+let frozen = false;
+let busy = false;
+let photo = null;
+let frameReady = false;
+
+const frame = new Image();
+frame.onload = () => {
+ frameReady = true;
+ if(frozen && photo) draw(photo);
+};
+frame.src = 'frame-portrait.png';
+
+function status(msg){
+ $('status').textContent = msg;
+}
+
+function cover(source,x,y,w,h,mirror=false){
+ const sw = source.videoWidth || source.naturalWidth || source.width;
+ const sh = source.videoHeight || source.naturalHeight || source.height;
+ if(!sw || !sh) return;
+ const scale = Math.max(w/sw,h/sh);
+ ctx.save();
+ ctx.beginPath();
+ ctx.rect(x,y,w,h);
+ ctx.clip();
+ ctx.translate(x+w/2,y+h/2);
+ if(mirror) ctx.scale(-1,1);
+ ctx.drawImage(source,-sw*scale/2,-sh*scale/2,sw*scale,sh*scale);
+ ctx.restore();
+}
+
+function draw(source,mirror=false){
+ ctx.fillStyle='#321052';
+ ctx.fillRect(0,0,W,H);
+ if(frameReady){
+  if(source) cover(source,0,0,W,H,mirror);
+  ctx.drawImage(frame,0,0,W,H);
+ }else{
+  if(source) cover(source,40,230,W-80,790,mirror);
+  ctx.strokeStyle='#edca70';
+  ctx.lineWidth=12;
+  ctx.strokeRect(20,20,W-40,H-40);
+  ctx.textAlign='center';
+  ctx.fillStyle='#ffdb78';
+  ctx.font='bold 46px Arial';
+  ctx.fillText('PPKI MAWAR',W/2,85);
+  ctx.fillStyle='white';
+  ctx.font='bold 32px Arial';
+  ctx.fillText('SK BAYAN BARU',W/2,135);
+  ctx.fillText('LAST DAY OF SCHOOL 2026',W/2,190);
+  ctx.font='italic 30px Arial';
+  ctx.fillText('Kenangan Terindah, Memori Selamanya',W/2,1100);
+  if(!source){
+   ctx.fillStyle='#dac5f4';
+   ctx.font='32px Arial';
+   ctx.fillText('Ruang Gambar Anda',W/2,620);
+  }
+ }
+}
+
+function loop(){
+ if(!frozen && video.readyState>=2 && stream){
+  draw(video,facing==='user');
+ }
+ requestAnimationFrame(loop);
+}
+draw(null);
+loop();
+
+function stopCamera(){
+ if(stream) stream.getTracks().forEach(t=>t.stop());
+ stream=null;
+ video.srcObject=null;
+}
+
+async function startCamera(){
+ if(busy) return;
+ busy=true;
+ $('capture').disabled=true;
+ $('start').disabled=true;
+ $('flip').disabled=true;
+ try{
+  stopCamera();
+  stream=await navigator.mediaDevices.getUserMedia({
+   video:{facingMode:{ideal:facing}},
+   audio:false
+  });
+  video.srcObject=stream;
+  await video.play();
+  frozen=false;
+  photo=null;
+  $('capture').disabled=false;
+  $('save').disabled=true;
+  $('retake').disabled=true;
+  status('Kamera sedia. Senyum!');
+ }catch(e){
+  stopCamera();
+  status('Kamera tidak dapat dibuka. Semak kebenaran kamera atau pilih gambar.');
+ }finally{
+  busy=false;
+  $('start').disabled=false;
+  $('flip').disabled=false;
+ }
+}
+
+$('start').onclick=startCamera;
+
+$('flip').onclick=()=>{
+ if(busy) return;
+ facing=facing==='user'?'environment':'user';
+ startCamera();
+};
+
+$('capture').onclick=async()=>{
+ if(busy || !stream || video.readyState<2) return;
+ busy=true;
+ $('capture').disabled=true;
+ $('start').disabled=true;
+ $('flip').disabled=true;
+ $('upload').disabled=true;
+ try{
+  for(let n=Number($('timer').value);n>0;n--){
+   $('count').textContent=n;
+   await new Promise(r=>setTimeout(r,1000));
+  }
+  $('count').textContent='';
+  if(video.readyState<2) throw Error('Camera unavailable');
+  photo=document.createElement('canvas');
+  photo.width=video.videoWidth;
+  photo.height=video.videoHeight;
+  const p=photo.getContext('2d');
+  if(facing==='user'){
+   p.translate(photo.width,0);
+   p.scale(-1,1);
+  }
+  p.drawImage(video,0,0);
+  frozen=true;
+  draw(photo);
+  stopCamera();
+  $('save').disabled=false;
+  $('retake').disabled=false;
+  status('Gambar berjaya diambil!');
+ }catch(e){
+  status('Gambar gagal diambil. Cuba lagi.');
+  $('capture').disabled=!stream;
+ }finally{
+  busy=false;
+  $('count').textContent='';
+  $('start').disabled=false;
+  $('flip').disabled=false;
+  $('upload').disabled=false;
+ }
+};
+
+$('upload').onchange=e=>{
+ const file=e.target.files[0];
+ if(!file || busy) return;
+ const url=URL.createObjectURL(file);
+ const img=new Image();
+ img.onload=()=>{
+  stopCamera();
+  frozen=true;
+  photo=img;
+  draw(photo);
+  $('capture').disabled=true;
+  $('save').disabled=false;
+  $('retake').disabled=false;
+  status('Gambar sedia untuk disimpan.');
+  URL.revokeObjectURL(url);
+ };
+ img.onerror=()=>{
+  URL.revokeObjectURL(url);
+  status('Format gambar tidak dapat dibuka.');
+ };
+ img.src=url;
+ e.target.value='';
+};
+
+$('retake').onclick=startCamera;
+
+$('save').onclick=()=>{
+ if(!frozen || !photo) return;
+ canvas.toBlob(blob=>{
+  if(!blob) return;
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;
+  a.download='MAWAR-2026-'+Date.now()+'.jpg';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),30000);
+  status('Permintaan simpan gambar dihantar.');
+ },'image/jpeg',0.95);
+};
+
+window.addEventListener('pagehide',stopCamera);
+</script>
+</body>
+</html>
